@@ -34,35 +34,41 @@ client_sock = socket(AF_INET, SOCK_STREAM) # socket for server to connect to thi
 my_port = const.registry[me][1] # addresses (which it would register in the ns)
 client_sock.bind(('0.0.0.0', my_port)) # NB: AWS instances don't allow binding to their public IP address!
 client_sock.listen(5)
-
 #
+
+# Handle loop for user interaction (in the main thread)
+def send_message():
+  while True:
+      server_sock = socket(AF_INET, SOCK_STREAM) # socket to connect to server
+      dest = input("ENTER DESTINATION: ")
+      msg = input("ENTER MESSAGE: ")
+      #
+      # Connect to server
+      try:
+          server_sock.connect((const.CHAT_SERVER_HOST, const.CHAT_SERVER_PORT))
+      except:
+          print("Server is down. Exiting...")
+          exit(1)
+      # Send message and wait for confirmation
+      msg_pack = (msg, dest, me)
+      marshaled_msg_pack = pickle.dumps(msg_pack)
+      server_sock.send(marshaled_msg_pack)
+      marshaled_reply = server_sock.recv(1024)
+      reply = pickle.loads(marshaled_reply)
+      if reply != "ACK":
+          print("Error: Server did not accept the message (dest does not exist?)")
+      else:
+          #print("Received Ack from server")
+          pass
+      server_sock.close()
+
 # Put receiving thread to run
 recv_handler = RecvHandler(client_sock)
 recv_handler.start()
 
-#
-# Handle loop for user interaction (in the main thread)
-while True:
-    server_sock = socket(AF_INET, SOCK_STREAM) # socket to connect to server
-    dest = input("ENTER DESTINATION: ")
-    msg = input("ENTER MESSAGE: ")
-    #
-    # Connect to server
-    try:
-        server_sock.connect((const.CHAT_SERVER_HOST, const.CHAT_SERVER_PORT))
-    except:
-        print("Server is down. Exiting...")
-        exit(1)
-    #
-    # Send message and wait for confirmation
-    msg_pack = (msg, dest, me)
-    marshaled_msg_pack = pickle.dumps(msg_pack)
-    server_sock.send(marshaled_msg_pack)
-    marshaled_reply = server_sock.recv(1024)
-    reply = pickle.loads(marshaled_reply)
-    if reply != "ACK":
-        print("Error: Server did not accept the message (dest does not exist?)")
-    else:
-        #print("Received Ack from server")
-        pass
-    server_sock.close()
+
+#Put sending thread to run
+send_thread = threading.Thread(target=send_message)
+send_thread.start() # start sending messages thread
+
+send_thread.join()
